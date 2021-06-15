@@ -19,9 +19,10 @@ type State =
     LastCheckedVersion: ConcurrentDictionary<string<LocalPath>, int>
     ProjectController: ProjectController
 
+    mutable CompletionVersion: int
     HelpText : ConcurrentDictionary<DeclName, FSharpToolTipText>
     Declarations: ConcurrentDictionary<DeclName, FSharpDeclarationListItem * Pos * string<LocalPath>>
-    CompletionNamespaceInsert : ConcurrentDictionary<DeclName, CompletionNamespaceInsert>
+    CompletionNamespaceInsert : ConcurrentDictionary<DeclName, int*CompletionNamespaceInsert>
     mutable CurrentAST: FSharp.Compiler.SyntaxTree.ParsedInput option
 
     NavigationDeclarations : ConcurrentDictionary<string<LocalPath>, FSharpNavigationTopLevelDeclaration[]>
@@ -37,6 +38,7 @@ type State =
     { Files = ConcurrentDictionary()
       LastCheckedVersion = ConcurrentDictionary()
       ProjectController = new ProjectController(toolsPath, workspaceLoaderFactory)
+      CompletionVersion = 0
       HelpText = ConcurrentDictionary()
       Declarations = ConcurrentDictionary()
       CurrentAST = None

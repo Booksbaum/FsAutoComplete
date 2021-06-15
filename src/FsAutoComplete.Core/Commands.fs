@@ -76,6 +76,7 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
     let commandsLogger = LogProvider.getLoggerByName "Commands"
     let checkerLogger = LogProvider.getLoggerByName "CheckerEvents"
     let fantomasLogger = LogProvider.getLoggerByName "Fantomas"
+    let testLogger = LogProvider.getLoggerByName "Test"
 
     // given an enveloping range and the sub-ranges it overlaps, split out the enveloping range into a
     // set of range segments that are non-overlapping with the children
@@ -357,7 +358,7 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
             )
         )
 
-    let fillHelpTextInTheBackground decls (pos : Pos) fn getLine =
+    let fillHelpTextInTheBackground decls (pos : Pos) fn getLine (version: int) =
         let declName (d: FSharpDeclarationListItem) = d.Name
 
         //Fill list of declarations synchronously to know which declarations should be in cache.
@@ -369,7 +370,7 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
             for decl in decls do
                 let n = declName decl
                 match calculateNamespaceInsert decl pos getLine with
-                | Some insert -> state.CompletionNamespaceInsert.[n] <- insert
+                | Some insert -> state.CompletionNamespaceInsert.[n] <- (version,insert)
                 | None -> ()
         } |> Async.Start
 
@@ -681,6 +682,8 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
     }
 
     member __.Helptext sym = async {
+        let version = state.CompletionVersion
+        testLogger.info (Log.setMessage "Commands.Helptext(v{version})" >> Log.addContextDestructured "version" version)
         match KeywordList.keywordDescriptions.TryGetValue sym with
         | true, s ->
             return CoreResponse.Res (HelpText.Simple (sym, s))
@@ -712,8 +715,29 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
 
                 let n =
                     match state.CompletionNamespaceInsert.TryFind sym with
-                    | None -> calculateNamespaceInsert decl pos getSource
-                    | Some s -> Some s
+                    | None -> 
+                        testLogger.info (Log.setMessage "uncached NsInsert")
+                        calculateNamespaceInsert decl pos getSource
+                    | Some (cachedVersion, s) ->
+                        testLogger.info (Log.setMessage "cached NsInsert(v{cachedVersion})" >> Log.addContextDestructured "cachedVersion" cachedVersion)
+                        if version <> cachedVersion then
+                            testLogger.error (
+                                Log.setMessage "versions don't match: current v{version} <> v{cachedVersion} cached"
+                                >> Log.addContextDestructured "version" version
+                                >> Log.addContextDestructured "cachedVersion" cachedVersion
+                            )
+                        let calculated = calculateNamespaceInsert decl pos getSource
+                        match calculated with
+                        | None -> testLogger.info (Log.setMessage "no calculated NsInsert")
+                        | Some calculated when calculated.Position = s.Position ->
+                            testLogger.info (Log.setMessage "same NsInsert")
+                        | Some calculated ->
+                            testLogger.error (
+                                Log.setMessage "different NsInsert: expected={expected}; cached={cached}" 
+                                >> Log.addContextDestructured "expected" calculated.Position 
+                                >> Log.addContextDestructured "cached" s.Position
+                                )
+                        Some s
                 return CoreResponse.Res (HelpText.Full (sym, tip, n))
     }
 
@@ -722,6 +746,8 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
     member x.Error msg = [CoreResponse.ErrorRes msg]
 
     member x.Completion (tyRes : ParseAndCheckResults) (pos: Pos) lineStr (lines : ISourceText) (fileName : string<LocalPath>) filter includeKeywords includeExternal = async {
+        let version = System.Threading.Interlocked.Increment(&state.CompletionVersion)
+        testLogger.info (Log.setMessage "Commands.Completion(v{version})" >> Log.addContextDestructured "version" version)
         let getAllSymbols () =
             if includeExternal then tyRes.GetAllEntities true else []
         let! res = tyRes.TryGetCompletions pos lineStr filter getAllSymbols
@@ -737,7 +763,7 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
             state.CurrentAST <- tyRes.GetAST
 
             //Fill cache for current list
-            do fillHelpTextInTheBackground decls pos fileName getLine
+            do fillHelpTextInTheBackground decls pos fileName getLine version
 
             // Send the first help text without being requested.
             // This allows it to be displayed immediately in the editor.
