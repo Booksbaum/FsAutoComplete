@@ -188,24 +188,26 @@ let autocompleteTest state =
 
 let autoOpenTests state =
   let dirPath = Path.Combine(__SOURCE_DIRECTORY__, "TestCases", "CompletionAutoOpenTests")
-  let serverFor (scriptPath: string) = async {
-    // Auto Open requires unopened things in completions -> External
-    let config = { defaultConfigDto with ExternalAutocomplete = Some true; ResolveNamespaces = Some true }
+  let serverFor (scriptPath: string) = 
+    async {
+      // Auto Open requires unopened things in completions -> External
+      let config = { defaultConfigDto with ExternalAutocomplete = Some true; ResolveNamespaces = Some true }
 
-    let dirPath = Path.GetDirectoryName scriptPath
-    let scriptName = Path.GetFileName scriptPath
-    let! (server, events) = serverInitialize dirPath config state
-    do! waitForWorkspaceFinishedParsing events
+      let dirPath = Path.GetDirectoryName scriptPath
+      let scriptName = Path.GetFileName scriptPath
+      let! (server, events) = serverInitialize dirPath config state
+      do! waitForWorkspaceFinishedParsing events
 
-    let tdop: DidOpenTextDocumentParams = { TextDocument = loadDocument scriptPath }
-    do! server.TextDocumentDidOpen tdop
-    do! 
-      waitForParseResultsForFile scriptName events 
-      |> AsyncResult.bimap (fun _ -> failtest "Should have had errors") id
-      |> Async.Ignore
+      let tdop: DidOpenTextDocumentParams = { TextDocument = loadDocument scriptPath }
+      do! server.TextDocumentDidOpen tdop
+      do! 
+        waitForParseResultsForFile scriptName events 
+        |> AsyncResult.bimap (fun _ -> failtest "Should have had errors") id
+        |> Async.Ignore
 
-    return (server, scriptPath)
-  }
+      return (server, scriptPath)
+    }
+    |> Async.Cache
   let calcOpenPos (edit: TextEdit) =
     let text = edit.NewText
     let pos = edit.Range.Start
