@@ -363,14 +363,14 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
 
         //Fill list of declarations synchronously to know which declarations should be in cache.
         for d in decls do
-            state.Declarations.[declName d] <- (d, pos, fn)
+            state.Declarations.[(version, declName d)] <- (d, pos, fn)
 
         //Fill namespace insertion cache asynchronously.
         async {
             for decl in decls do
                 let n = declName decl
                 match calculateNamespaceInsert decl pos getLine with
-                | Some insert -> state.CompletionNamespaceInsert.[n] <- (version,insert)
+                | Some insert -> state.CompletionNamespaceInsert.[(version,n)] <- insert
                 | None -> ()
         } |> Async.Start
 
@@ -693,7 +693,7 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
             return CoreResponse.Res (HelpText.Simple (sym, s))
         | _ ->
         let sym = if sym.StartsWith "``" && sym.EndsWith "``" then sym.TrimStart([|'`'|]).TrimEnd([|'`'|]) else sym
-        match state.Declarations.TryFind sym with
+        match state.Declarations.TryFind (version, sym) with
         | None -> //Isn't in sync filled cache, we don't have result
             return CoreResponse.ErrorRes (sprintf "No help text available for symbol '%s'" sym)
         | Some (decl, pos, fn) -> //Is in sync filled cache, try to get results from async filled caches or calculate if it's not there
@@ -706,37 +706,20 @@ type Commands (checker: FSharpCompilerServiceChecker, state: State, backgroundSe
                 let getSource = fun i -> source.GetLineString (i - 1)
 
                 let tip =
-                  match state.HelpText.TryFind sym with
+                  match state.HelpText.TryFind (version, sym) with
                   | Some tip -> tip
                   | None ->
                     let tip = decl.DescriptionText
-                    state.HelpText.[sym] <- tip
+                    state.HelpText.[(version, sym)] <- tip
                     tip
 
                 let n =
-                    match state.CompletionNamespaceInsert.TryFind sym with
+                    match state.CompletionNamespaceInsert.TryFind (version, sym) with
                     | None -> 
                         testLogger.info (Log.setMessage "uncached NsInsert")
                         calculateNamespaceInsert decl pos getSource
-                    | Some (cachedVersion, s) ->
-                        testLogger.info (Log.setMessage "cached NsInsert(v{cachedVersion})" >> Log.addContextDestructured "cachedVersion" cachedVersion)
-                        if version <> cachedVersion then
-                            testLogger.error (
-                                Log.setMessage "versions don't match: current v{version} <> v{cachedVersion} cached"
-                                >> Log.addContextDestructured "version" version
-                                >> Log.addContextDestructured "cachedVersion" cachedVersion
-                            )
-                        let calculated = calculateNamespaceInsert decl pos getSource
-                        match calculated with
-                        | None -> testLogger.info (Log.setMessage "no calculated NsInsert")
-                        | Some calculated when calculated.Position = s.Position ->
-                            testLogger.info (Log.setMessage "same NsInsert")
-                        | Some calculated ->
-                            testLogger.error (
-                                Log.setMessage "different NsInsert: expected={expected}; cached={cached}" 
-                                >> Log.addContextDestructured "expected" calculated.Position 
-                                >> Log.addContextDestructured "cached" s.Position
-                                )
+                    | Some s ->
+                        testLogger.info (Log.setMessage "cached NsInsert")
                         Some s
                 return CoreResponse.Res (HelpText.Full (sym, tip, n))
     }

@@ -20,9 +20,9 @@ type State =
     ProjectController: ProjectController
 
     mutable CompletionVersion: int
-    HelpText : ConcurrentDictionary<DeclName, FSharpToolTipText>
-    Declarations: ConcurrentDictionary<DeclName, FSharpDeclarationListItem * Pos * string<LocalPath>>
-    CompletionNamespaceInsert : ConcurrentDictionary<DeclName, int*CompletionNamespaceInsert>
+    HelpText : ConcurrentDictionary<int*DeclName, FSharpToolTipText>
+    Declarations: ConcurrentDictionary<int*DeclName, FSharpDeclarationListItem * Pos * string<LocalPath>>
+    CompletionNamespaceInsert : ConcurrentDictionary<int*DeclName,CompletionNamespaceInsert>
     mutable CurrentAST: FSharp.Compiler.SyntaxTree.ParsedInput option
 
     NavigationDeclarations : ConcurrentDictionary<string<LocalPath>, FSharpNavigationTopLevelDeclaration[]>
