@@ -368,20 +368,20 @@ let autoOpenTests state =
         })
     ]
 
-  testList "Completion.AutoOpen" [
+  ftestList "Completion.AutoOpen" [
     // NOTE: Positions are ZERO-based!: { Line = 3; Character = 9 } -> Line 4, Column 10 in editor display
     testScript "with root module with new line" "ModuleWithNewLine.fsx"
-    testScript "with root module" "Module.fsx"
-    testScript "with root module with open" "ModuleWithOpen.fsx"
-    testScript "with root module with open and new line" "ModuleWithOpenAndNewLine.fsx"
-    testScript "with namespace with new line" "NamespaceWithNewLine.fsx"
-    testScript "with namespace" "Namespace.fsx"
-    testScript "with namespace with open" "NamespaceWithOpen.fsx"
-    testScript "with namespace with open and new line" "NamespaceWithOpenAndNewLine.fsx"
-    testScript "with implicit top level module with new line" "ImplicitTopLevelModuleWithNewLine.fsx"
-    testScript "with implicit top level module" "ImplicitTopLevelModule.fsx"
-    testScript "with implicit top level module with open" "ImplicitTopLevelModuleWithOpen.fsx"
-    testScript "with implicit top level module with open and new line" "ImplicitTopLevelModuleWithOpenAndNewLine.fsx"
-    testScript "with implicit top level module with open and new lines" "ImplicitTopLevelModuleWithOpenAndNewLines.fsx"
-    testScript "with root module with comments and new line before open" "ModuleDocsAndNewLineBeforeOpen.fsx"
+    // testScript "with root module" "Module.fsx"
+    // testScript "with root module with open" "ModuleWithOpen.fsx"
+    // testScript "with root module with open and new line" "ModuleWithOpenAndNewLine.fsx"
+    // testScript "with namespace with new line" "NamespaceWithNewLine.fsx"
+    // testScript "with namespace" "Namespace.fsx"
+    // testScript "with namespace with open" "NamespaceWithOpen.fsx"
+    // testScript "with namespace with open and new line" "NamespaceWithOpenAndNewLine.fsx"
+    // testScript "with implicit top level module with new line" "ImplicitTopLevelModuleWithNewLine.fsx"
+    // testScript "with implicit top level module" "ImplicitTopLevelModule.fsx"
+    // testScript "with implicit top level module with open" "ImplicitTopLevelModuleWithOpen.fsx"
+    // testScript "with implicit top level module with open and new line" "ImplicitTopLevelModuleWithOpenAndNewLine.fsx"
+    // testScript "with implicit top level module with open and new lines" "ImplicitTopLevelModuleWithOpenAndNewLines.fsx"
+    // testScript "with root module with comments and new line before open" "ModuleDocsAndNewLineBeforeOpen.fsx"
   ]
