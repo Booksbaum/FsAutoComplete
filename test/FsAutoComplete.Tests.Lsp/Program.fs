@@ -28,6 +28,27 @@ let loaders = [
   // "MSBuild Project Graph WorkspaceLoader", WorkspaceLoaderViaProjectGraph.Create
 ]
 
+open System.IO
+open Helpers
+open LanguageServerProtocol.Types
+open FsAutoComplete.Utils
+open Expecto.Flip
+let windowsTest state =
+  testCaseAsync "windows test" <| async {
+    let dirPath = Path.Combine(__SOURCE_DIRECTORY__, "TestCases", "Completion")
+    let scriptName = "Script.fsx"
+    let scriptPath = Path.Combine(dirPath, scriptName)
+
+    let! (server, events) = serverInitialize dirPath defaultConfigDto state
+    do! waitForWorkspaceFinishedParsing events
+
+    let tdop : DidOpenTextDocumentParams = { TextDocument = loadDocument scriptPath }
+    do! server.TextDocumentDidOpen tdop
+
+    let! diagnostics = waitForParseResultsForFile "Script.fsx" events |> AsyncResult.bimap (fun _ -> Array.empty) id
+    diagnostics |> Expect.isNonEmpty "expected error"
+  }
+
 ///Global list of tests
 [<Tests>]
 let tests =
@@ -36,6 +57,7 @@ let tests =
     for (name, workspaceLoaderFactory) in loaders do
       testSequenced <| testList name [
         let state = FsAutoComplete.State.Initial toolsPath workspaceLoaderFactory
+        windowsTest state
         initTests state
         codeLensTest state
         documentSymbolTest state
@@ -111,6 +133,7 @@ let main args =
   let config =
     { defaultConfig
       with runInParallel = false
-           failOnFocusedTests = true
+          //  failOnFocusedTests = true
+           failOnFocusedTests = false
            printer = Expecto.Impl.TestPrinters.summaryPrinter defaultConfig.printer }
   runTestsWithArgsAndCancel cts.Token config args tests

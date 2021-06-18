@@ -58,6 +58,7 @@ type FileSystem (actualFs: IFileSystem, tryFindFile: string<LocalPath> -> Volati
          |> Option.map (fun file -> file.Lines.ToString() |> System.Text.Encoding.UTF8.GetBytes)
 
     let fsLogger = LogProvider.getLoggerByName "FileSystem"
+    let testLogger = LogProvider.getLoggerByName "TestSystem"
     /// translation of the BCL's Windows logic for Path.IsPathRooted.
     ///
     /// either the first char is '/', or the first char is a drive identifier followed by ':'
@@ -87,11 +88,29 @@ type FileSystem (actualFs: IFileSystem, tryFindFile: string<LocalPath> -> Volati
           r
 
         member _.GetFullPathShim (f: string) =
+          //error!
           let expanded =
             Path.FilePathToUri f
             |> Path.FileUriToLocalPath
           fsLogger.debug (Log.setMessage "{path} expanded to {expanded}" >> Log.addContext "path" f >> Log.addContext "expanded" expanded)
-          expanded
+
+          testLogger.info (
+            Log.setMessage "GetFullPathShim:\n* path     = {path}\n* expanded = {expanded}\n* actualFs = {actual}\n* uri      = {uri}" 
+            >> Log.addContextDestructured "path" f 
+            >> Log.addContextDestructured "expanded" expanded
+            >> Log.addContextDestructured "actual" (actualFs.GetFullPathShim f)
+            >> Log.addContextDestructured "uri" (Path.FilePathToUri f)
+          )
+          
+          // expanded
+          // actualFs.GetFullPathShim f
+          // expanded.Replace("/", "\\")
+          // source: https://github.com/fsharp/FAKE/blob/release/next/src/app/Fake.Core.Environment/Environment.fs#L184-L192
+          match System.Environment.OSVersion.Platform with
+          | PlatformID.Win32NT | PlatformID.Win32S | PlatformID.Win32Windows | PlatformID.WinCE ->
+              expanded.Replace("/", "\\")
+          | _ -> expanded
+
 
         (* These next members all make use of the VolatileFile concept, and so need to check that before delegating to the original FS implementation *)
 

@@ -8,6 +8,7 @@ open Serilog
 open Serilog.Core
 open Serilog.Events
 open FsAutoComplete.Logging
+open Serilog.Filters
 
 [<EntryPoint>]
 let entry args =
@@ -26,6 +27,7 @@ let entry args =
       let logConf =
         LoggerConfiguration()
           .MinimumLevel.ControlledBy(verbositySwitch)
+          .Filter.ByExcluding(Matching.FromSource("FileSystem"))
           .Enrich.FromLogContext()
           .Destructure.FSharpTypes()
           .Destructure.ByTransforming<FSharp.Compiler.Text.Range>(fun r -> box {| FileName = r.FileName; Start = r.Start; End = r.End |})
