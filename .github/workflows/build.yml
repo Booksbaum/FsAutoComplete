@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    timeout-minutes: 15 # we have a locking issue, so cap the runs at ~15m to account for varying build times, etc
+    timeout-minutes: 30 # we have a locking issue, so cap the runs at ~15m to account for varying build times, etc
     strategy:
       matrix:
         os: [windows-2019, macos-10.15, ubuntu-20.04]
@@ -39,4 +39,4 @@ jobs:
         extra_test_parameters: "--no-build /p:AltCover=true /p:AltCoverAssemblyExcludeFilter=System.Reactive|FSharp.Compiler.Service|Ionide.ProjInfo|FSharp.Analyzers|Analyzer|Humanizer|FSharp.Core|Dapper|FSharp.DependencyManager"
         skip_check_run: true # something's wrong with the PAT used above, so github checks won't be added
       env:
-        TEST_TIMEOUT_MINUTES: 10
+        TEST_TIMEOUT_MINUTES: 30
