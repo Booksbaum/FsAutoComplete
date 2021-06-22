@@ -94,22 +94,122 @@ type FileSystem (actualFs: IFileSystem, tryFindFile: string<LocalPath> -> Volati
             |> Path.FileUriToLocalPath
           fsLogger.debug (Log.setMessage "{path} expanded to {expanded}" >> Log.addContext "path" f >> Log.addContext "expanded" expanded)
 
-          testLogger.info (
-            Log.setMessage "GetFullPathShim:\n* path     = {path}\n* expanded = {expanded}\n* actualFs = {actual}\n* uri      = {uri}" 
-            >> Log.addContextDestructured "path" f 
-            >> Log.addContextDestructured "expanded" expanded
-            >> Log.addContextDestructured "actual" (actualFs.GetFullPathShim f)
-            >> Log.addContextDestructured "uri" (Path.FilePathToUri f)
-          )
-          
+          let log (values: (string*obj) list) =
+            let l = values |> List.map (fst >> String.length) |> List.max
+            let msg = 
+              values
+              |> List.map (fun (n, _) -> sprintf "* %-*s = {%s}" l n n)
+              |> String.concat "\n"
+              |> sprintf "GetFullPathShim:\n%s\n"
+
+            values
+            |> List.fold (
+              fun l (n, v) ->
+                l >> Log.addContextDestructured n v
+            ) (Log.setMessage msg)
+            |> testLogger.info
+
+
           // expanded
           // actualFs.GetFullPathShim f
           // expanded.Replace("/", "\\")
-          // source: https://github.com/fsharp/FAKE/blob/release/next/src/app/Fake.Core.Environment/Environment.fs#L184-L192
           match System.Environment.OSVersion.Platform with
           | PlatformID.Win32NT | PlatformID.Win32S | PlatformID.Win32Windows | PlatformID.WinCE ->
-              expanded.Replace("/", "\\")
+              let ensureForwardSlash (str: string) =
+                str.Replace("\\", "/")
+              let ensureBackwardSlash (str: string) =
+                str.Replace("/", "\\")
+              let ensureChaos (str: string) =
+                // alternate slash direction to provoke errors
+
+                // special treatment for leading double slashes (network drive)
+                let (str, start) =
+                  if str.StartsWith "//" || str.StartsWith "\\\\" then
+                    (str.Substring(2), true)
+                  else
+                    (str, false)
+                  
+                let str =
+                  str.Split('/', '\\')
+                  |> Array.fold (fun (str, back) p -> 
+                      let p =
+                        if str |> String.IsNullOrWhiteSpace then
+                          p
+                        else
+                          let s = if back then '\\' else '/'
+                          sprintf "%s%c%s" str s p
+                      (p, not back)
+                  ) ("", false)
+                  |> fst
+
+                if start then
+                  sprintf "//%s" str
+                else
+                  str
+
+              if false then
+                ""
+              // for `GoToTests.fs` -> `lsp.Ionide WorkspaceLoader.Go to definition tests.GoTo Tests.Go-to-type-definition on property`
+              // -> test Goto type on Property of type `string option` -> in `prim-types.fsi`
+              // GetFullPathShim:
+              // * path     = "E:\A\_work\130\s\src\fsharp\FSharp.Core\prim-types.fsi"
+              // * uri      = "file:///E%3A/A/_work/130/s/src/fsharp/FSharp.Core/prim-types.fsi"
+              // * expanded = "E:/A/_work/130/s/src/fsharp/FSharp.Core/prim-types.fsi"
+              // * return   = "E:/A/_work/130/s/src/fsharp/FSharp.Core/prim-types.fsi"
+              //               ^^^^^^ ok
+              // * actualFs = "E:\A\_work\130\s\src\fsharp\FSharp.Core\prim-types.fsi"
+              //               ^^^^^^ not ok
+              // Note: doesn't exists on local -> from source (debug data)
+              // Note: all other don't matter for this test...
+              else if expanded.EndsWith "prim-types.fsi" then
+                expanded |> ensureForwardSlash
+              else if expanded.EndsWith ".fsi" then
+                expanded |> ensureForwardSlash
+              // for `Program.fs` -> `lsp.Ionide WorkspaceLoader.windows error.script test`
+              // GetFullPathShim:
+              // * path     = "e:\prog\fsharp\editor\ionide\FsAutoComplete\test\FsAutoComplete.Tests.Lsp\TestCases\Completion\Script.fsx"
+              // * uri      = "file:///e%3A/prog/fsharp/editor/ionide/FsAutoComplete/test/FsAutoComplete.Tests.Lsp/TestCases/Completion/Script.fsx"
+              // * expanded = "e:/prog/fsharp/editor/ionide/FsAutoComplete/test/FsAutoComplete.Tests.Lsp/TestCases/Completion/Script.fsx"
+              // * return   = "e:\prog\fsharp\editor\ionide\FsAutoComplete\test\FsAutoComplete.Tests.Lsp\TestCases\Completion\Script.fsx"
+              // * actualFs = "e:\prog\fsharp\editor\ionide\FsAutoComplete\test\FsAutoComplete.Tests.Lsp\TestCases\Completion\Script.fsx"
+              // Note: ONLY script file -- other resolved paths are all dll, fs, fsi
+              else if expanded.EndsWith ".fsx" then
+                // expanded |> ensureChaos // error
+                // expanded |> ensureForwardSlash // error
+                expanded |> ensureBackwardSlash // ok
+              // pdb files not resolved via GetFullPathShim
+              // else if expanded.EndsWith ".pdb" then
+              //   expanded |> ensureForwardSlash
+              // for `GoToTests.fs` -> `lsp.Ionide WorkspaceLoader.Go to definition tests.GoTo Tests.Go-to-implementation on sourcelink file with sourcelink in PDB`
+              // * pdb files aren't resolved via FileSystem, but path seems to be generated based on fs-files handled here.
+              //   But that result isn't normalized again -> required forward slashes to work
+              // otherwise:
+              // ```
+              // [Expecto 00:00:04.3241963] FsAutoComplete.Tests.Lsp: [W] 2021-06-21T17:46:17.1679077+00:00: No sourcelinked source file matched "C:\projects/giraffe\src/Giraffe\GiraffeViewEngine.fs". Available documents were (normalized paths here): ["C:/projects/giraffe/src/Giraffe/Middleware.fs", "C:/projects/giraffe/src/Giraffe/HttpStatusCodeHandlers.fs", "C:/projects/giraffe/src/Giraffe/Negotiation.fs", "C:/projects/giraffe/src/Giraffe/Streaming.fs", "C:/projects/giraffe/src/Giraffe/Preconditional.fs", "C:/projects/giraffe/src/Giraffe/ResponseWriters.fs", "C:/projects/giraffe/src/Giraffe/Routing.fs", "C:/projects/giraffe/src/Giraffe/Auth.fs", "C:/projects/giraffe/src/Giraffe/ModelValidation.fs", "C:/projects/giraffe/src/Giraffe/ModelBinding.fs", "C:/projects/giraffe/src/Giraffe/GiraffeViewEngine.fs", "C:/projects/giraffe/src/Giraffe/ResponseCaching.fs", "C:/projects/giraffe/src/Giraffe/Core.fs", "C:/projects/giraffe/src/Giraffe/FormatExpressions.fs", "C:/projects/giraffe/src/Giraffe/Serialization.fs", "C:/projects/giraffe/src/Giraffe/ComputationExpressions.fs", "C:/projects/giraffe/src/Giraffe/Common.fs"] [Serilog]
+              // ```
+              //todo: most likely same for `.fsi`
+              else if expanded.EndsWith ".fs" then
+                expanded |> ensureForwardSlash
+              // else if expanded.EndsWith ".fsi" then
+              //   expanded |> ensureBackwardSlash
+              // else if expanded.EndsWith ".dll" then
+              //   expanded |> ensureForwardSlash
+              else
+                // expanded.Replace("/", "\\")
+                // expanded
+                // alternate between `/` and `\` to provoke errors
+                expanded |> ensureChaos
+              //todo: network drive?
           | _ -> expanded
+          |> fun p ->
+              log [
+                ("path", box f)
+                ("uri", box <| Path.FilePathToUri f)
+                ("expanded", box expanded)
+                ("return", box p)
+                ("actualFs", box <| actualFs.GetFullPathShim f)
+              ]
+              p
 
 
         (* These next members all make use of the VolatileFile concept, and so need to check that before delegating to the original FS implementation *)

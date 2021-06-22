@@ -469,3 +469,65 @@ let waitForParsedScript (event: ClientEvents) =
     if filename = "Script.fs" then Some n else None
   )
   |> Async.AwaitObservable
+
+
+open Serilog
+open Serilog.Core
+open Serilog.Events
+
+type ExpectoSink (name: string) =
+  let logger = Expecto.Logging.Log.create name
+
+  interface ILogEventSink with
+    member _.Emit(logEvent: LogEvent) =
+      let logLevel =
+        match logEvent.Level with
+        | LogEventLevel.Fatal -> LogLevel.Fatal
+        | LogEventLevel.Error -> LogLevel.Error
+        | LogEventLevel.Warning -> LogLevel.Warn
+        | LogEventLevel.Information -> LogLevel.Info
+        | LogEventLevel.Verbose -> LogLevel.Verbose
+        | LogEventLevel.Debug -> LogLevel.Debug
+        | _ -> LogLevel.Debug
+
+      let text = logEvent.RenderMessage();
+      logger.log logLevel (eventX text) |> Async.Start
+
+let createLogger debug =
+  let outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}"
+
+  let switch = LoggingLevelSwitch()
+  if debug
+  then
+    // switch.MinimumLevel <- LogEventLevel.Verbose
+    switch.MinimumLevel <- LogEventLevel.Debug
+  else
+    switch.MinimumLevel <- LogEventLevel.Information
+
+  let serilogLogger =
+    LoggerConfiguration()
+      .Enrich.FromLogContext()
+      .MinimumLevel.ControlledBy(switch)
+      .Filter.ByExcluding(fun ev ->
+        match ev.Properties.["SourceContext"] with
+        | null -> false
+        | :? ScalarValue as scalar ->
+          match scalar.Value with
+          | null -> false
+          | :? string as text when text = "FileSystem" -> true
+          | _ -> false
+        | _ -> false
+      )
+
+      .Destructure.FSharpTypes()
+      .Destructure.ByTransforming<FSharp.Compiler.Text.Range>(fun r -> box {| FileName = r.FileName; Start = r.Start; End = r.End |})
+      .Destructure.ByTransforming<FSharp.Compiler.Text.Pos>(fun r -> box {| Line = r.Line; Column = r.Column |})
+      .Destructure.ByTransforming<Newtonsoft.Json.Linq.JToken>(fun tok -> tok.ToString() |> box)
+      .Destructure.ByTransforming<System.IO.DirectoryInfo>(fun di -> box di.FullName)
+      .WriteTo.Async(
+        // fun c -> c.Console(outputTemplate = outputTemplate, standardErrorFromLevel = Nullable<_>(LogEventLevel.Verbose), theme = Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code) |> ignore
+        fun c -> c.Sink(ExpectoSink("Serilog"), restrictedToMinimumLevel = LogEventLevel.Debug) |> ignore
+      )
+      .CreateLogger() // make it so that every console log is logged to stderr
+  Serilog.Log.Logger <- serilogLogger
+  FsAutoComplete.Logging.LogProvider.setLoggerProvider (FsAutoComplete.Logging.Providers.SerilogProvider.create())

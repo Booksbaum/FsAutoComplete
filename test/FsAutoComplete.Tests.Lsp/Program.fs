@@ -34,25 +34,42 @@ open LanguageServerProtocol.Types
 open FsAutoComplete.Utils
 open Expecto.Flip
 let windowsTest state =
-  testCaseAsync "windows test" <| async {
-    let dirPath = Path.Combine(__SOURCE_DIRECTORY__, "TestCases", "Completion")
-    let scriptName = "Script.fsx"
-    let scriptPath = Path.Combine(dirPath, scriptName)
-
-    let! (server, events) = serverInitialize dirPath defaultConfigDto state
-    do! waitForWorkspaceFinishedParsing events
-
-    let tdop : DidOpenTextDocumentParams = { TextDocument = loadDocument scriptPath }
-    do! server.TextDocumentDidOpen tdop
-
-    let! diagnostics = waitForParseResultsForFile "Script.fsx" events |> AsyncResult.bimap (fun _ -> Array.empty) id
-    diagnostics |> Expect.isNonEmpty "expected error"
-  }
+  testList "windows error" [
+    testCaseAsync "script test" <| async {
+      let dirPath = Path.Combine(__SOURCE_DIRECTORY__, "TestCases", "WindowsError", "Script")
+      let scriptName = "Script.fsx"
+      let scriptPath = Path.Combine(dirPath, scriptName)
+  
+      let! (server, events) = serverInitialize dirPath defaultConfigDto state
+      do! waitForWorkspaceFinishedParsing events
+  
+      let tdop : DidOpenTextDocumentParams = { TextDocument = loadDocument scriptPath }
+      do! server.TextDocumentDidOpen tdop
+  
+      let! diagnostics = waitForParseResultsForFile scriptName events |> AsyncResult.bimap (fun _ -> Array.empty) id
+      diagnostics |> Expect.isNonEmpty "expected error"
+    }
+    testCaseAsync "project test" <| async {
+      let dirPath = Path.Combine(__SOURCE_DIRECTORY__, "TestCases", "WindowsError", "Project")
+      let scriptName = "Library.fs"
+      let scriptPath = Path.Combine(dirPath, scriptName)
+  
+      let! (server, events) = serverInitialize dirPath defaultConfigDto state
+      do! waitForWorkspaceFinishedParsing events
+  
+      let tdop : DidOpenTextDocumentParams = { TextDocument = loadDocument scriptPath }
+      do! server.TextDocumentDidOpen tdop
+  
+      let! diagnostics = waitForParseResultsForFile scriptName events |> AsyncResult.bimap (fun _ -> Array.empty) id
+      diagnostics |> Expect.isNonEmpty "expected error"
+    }
+  ]
 
 ///Global list of tests
 [<Tests>]
 let tests =
   let toolsPath = Ionide.ProjInfo.Init.init ()
+  // createLogger true
   testSequenced <| testList "lsp" [
     for (name, workspaceLoaderFactory) in loaders do
       testSequenced <| testList name [
